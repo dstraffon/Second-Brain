@@ -1,20 +1,38 @@
 /**
  * Notes stay plain text. A line starting with "- ", "* " or "• " is a bullet,
- * and runs of bullet lines render as a list. No markup is stored beyond that,
- * so old notes keep working and the text reads fine anywhere it is copied.
+ * and runs of bullet lines render as a list. Two spaces before the marker
+ * (or a tab) make it a sub-point one level down. No markup is stored beyond
+ * that, so old notes keep working and the text reads fine anywhere it is copied.
  */
 
 const BULLET = /^\s*[-*•]\s+/
 const BULLET_ONLY = /^\s*[-*•]\s*$/
+/** Spaces per level of nesting. */
+export const INDENT = '  '
+/** Deepest level a sub-point can go (0 is a top-level bullet). */
+export const MAX_DEPTH = 3
 
 export const isBullet = (line: string) => BULLET.test(line)
 
-export type NoteBlock = { kind: 'p'; text: string } | { kind: 'ul'; items: string[] }
+/** How far a bullet line is nested: 0 for a top-level bullet. */
+export function bulletDepth(line: string): number {
+  const lead = line.match(/^[ \t]*/)![0].replace(/\t/g, INDENT)
+  return Math.min(MAX_DEPTH, Math.floor(lead.length / INDENT.length))
+}
+
+export interface ListItem {
+  text: string
+  children: ListItem[]
+}
+
+export type NoteBlock = { kind: 'p'; text: string } | { kind: 'ul'; items: ListItem[] }
 
 export function parseNote(text: string): NoteBlock[] {
   const blocks: NoteBlock[] = []
   let para: string[] = []
-  let list: string[] = []
+  let list: ListItem[] = []
+  // The open item at each depth, so a sub-point lands under the bullet above it.
+  let path: ListItem[] = []
   const flushPara = () => {
     // Trim blank lines at the edges of a paragraph but keep ones inside it.
     while (para.length && !para[0].trim()) para.shift()
@@ -25,6 +43,7 @@ export function parseNote(text: string): NoteBlock[] {
   const flushList = () => {
     if (list.length) blocks.push({ kind: 'ul', items: list })
     list = []
+    path = []
   }
   for (const line of text.split('\n')) {
     if (BULLET_ONLY.test(line)) {
@@ -32,7 +51,12 @@ export function parseNote(text: string): NoteBlock[] {
       continue
     } else if (isBullet(line)) {
       flushPara()
-      list.push(line.replace(BULLET, ''))
+      // A sub-point can sit at most one level below the bullet before it.
+      const depth = Math.min(bulletDepth(line), path.length)
+      const item: ListItem = { text: line.replace(BULLET, ''), children: [] }
+      if (depth === 0) list.push(item)
+      else path[depth - 1].children.push(item)
+      path = [...path.slice(0, depth), item]
     } else {
       flushList()
       para.push(line)
@@ -77,13 +101,57 @@ export function toggleBullets(value: string, selStart: number, selEnd: number): 
 }
 
 /**
- * New line inside a list: carries the bullet on, or ends the list when the
- * current bullet is empty. Returns null when the caret isn't on a bullet line.
+ * Tab / Shift+Tab: moves the bullet lines touched by the selection one level
+ * in or out. A sub-point goes at most one level below the bullet above it.
+ * Returns null when none of the lines is a bullet, so Tab keeps its usual job.
+ */
+export function indentBullets(value: string, selStart: number, selEnd: number, dir: 1 | -1): Edit | null {
+  const from = value.lastIndexOf('\n', selStart - 1) + 1
+  // A selection ending at the very start of a line doesn't take that line in.
+  const endAt = selEnd > selStart && value[selEnd - 1] === '\n' ? selEnd - 1 : selEnd
+  const nl = value.indexOf('\n', endAt)
+  const to = nl === -1 ? value.length : nl
+  const lines = value.slice(from, to).split('\n')
+  if (!lines.some(isBullet)) return null
+  const before = value.slice(0, from).split('\n')
+  const above = from > 0 ? before[before.length - 2] : undefined
+  let prevDepth = above !== undefined && isBullet(above) ? bulletDepth(above) : -1
+  let startShift = 0
+  let total = 0
+  const next = lines.map((l, i) => {
+    if (!isBullet(l)) {
+      prevDepth = -1
+      return l
+    }
+    const d = bulletDepth(l)
+    const want = dir === 1 ? Math.min(d + 1, prevDepth + 1, MAX_DEPTH) : Math.max(0, d - 1)
+    const target = Math.max(want, dir === 1 ? d : 0)
+    const out = INDENT.repeat(target) + l.replace(/^[ \t]*/, '')
+    const shift = out.length - l.length
+    if (i === 0) startShift = shift
+    total += shift
+    prevDepth = target
+    return out
+  })
+  const replaced = next.join('\n')
+  const out = value.slice(0, from) + replaced + value.slice(to)
+  if (lines.length === 1 || selStart === selEnd) {
+    const caret = (p: number) => Math.max(from, p + startShift)
+    return { value: out, start: caret(selStart), end: caret(selEnd) }
+  }
+  return { value: out, start: Math.max(from, selStart + startShift), end: selEnd + total }
+}
+
+/**
+ * New line inside a list: carries the bullet on (at the same depth), or ends
+ * the list when the current bullet is empty. An empty sub-point steps out a
+ * level first. Returns null when the caret isn't on a bullet line.
  */
 export function continueList(value: string, selStart: number, selEnd: number): Edit | null {
   const from = value.lastIndexOf('\n', selStart - 1) + 1
   const line = value.slice(from, selStart)
   if (BULLET_ONLY.test(line) && value.slice(selEnd).split('\n')[0].trim() === '') {
+    if (bulletDepth(line) > 0) return indentBullets(value, selStart, selEnd, -1)
     const out = value.slice(0, from) + value.slice(selStart)
     return { value: out, start: from, end: from }
   }

@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { NoteText } from './NoteText'
-import { continueList, parseNote, toggleBullets, type Edit } from '../lib/noteText'
+import { IndentIcon } from './IndentIcon'
+import { bulletDepth, continueList, indentBullets, isBullet, MAX_DEPTH, parseNote, toggleBullets, type Edit, type ListItem } from '../lib/noteText'
 
 const coarse = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
 
@@ -9,6 +10,8 @@ const coarse = () => typeof window !== 'undefined' && window.matchMedia?.('(poin
  * Enter saves on a computer (Shift+Enter for a new line). On a touch screen
  * Enter adds a line, since there is no Shift key, and the button saves.
  * Inside a list a new line carries the bullet on; an empty bullet ends the list.
+ * Tab nests a bullet as a sub-point and Shift+Tab brings it back out. On a
+ * phone, with no Tab key, the bar's arrow buttons do the same.
  */
 export function NoteEditor(props: {
   title: string
@@ -44,6 +47,18 @@ export function NoteEditor(props: {
     props.onText(e.value)
   }
 
+  // Re-render when the caret moves, so the bar's buttons follow the line it's on.
+  const [, setCaret] = useState(0)
+  const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => setCaret(e.currentTarget.selectionStart)
+
+  const indent = (dir: 1 | -1) => {
+    const el = body.current
+    if (!el) return
+    const next = indentBullets(el.value, el.selectionStart, el.selectionEnd, dir)
+    if (next) apply(next)
+    el.focus()
+  }
+
   const toggle = () => {
     const el = body.current
     if (!el) return
@@ -65,6 +80,15 @@ export function NoteEditor(props: {
       toggle()
       return
     }
+    // Tab nests a bullet, Shift+Tab un-nests it. Off a bullet line Tab moves focus as usual.
+    if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const next = indentBullets(el.value, el.selectionStart, el.selectionEnd, e.shiftKey ? -1 : 1)
+      if (next) {
+        e.preventDefault()
+        apply(next)
+      }
+      return
+    }
     if (e.key !== 'Enter') return
     const newLine = e.shiftKey || coarse()
     if (!newLine) {
@@ -79,12 +103,15 @@ export function NoteEditor(props: {
     }
   }
 
-  const listOn = (() => {
+  const caretLine = (() => {
     const el = body.current
     const pos = el ? el.selectionStart : props.text.length
     const lineStart = props.text.lastIndexOf('\n', pos - 1) + 1
-    return /^\s*[-*•]\s/.test(props.text.slice(lineStart))
+    const lineEnd = props.text.indexOf('\n', pos)
+    return props.text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
   })()
+  const listOn = isBullet(caretLine)
+  const depth = listOn ? bulletDepth(caretLine) : 0
 
   return (
     <div className={`note-editor ${props.className ?? ''}`} onFocus={props.onFocus} onBlur={props.onBlur}>
@@ -118,6 +145,7 @@ export function NoteEditor(props: {
         placeholder={props.placeholder}
         aria-label="Note"
         onKeyDown={onBodyKey}
+        onSelect={onSelect}
       />
       {props.showTitle && (
         <div className="note-editor-bar">
@@ -132,7 +160,33 @@ export function NoteEditor(props: {
           >
             <span aria-hidden>•</span> List
           </button>
-          <span className="muted hint hide-touch">Enter to save · Shift+Enter new line</span>
+          {listOn && (
+            <span className="indent-btns" role="group" aria-label="Nesting">
+              <button
+                type="button"
+                className="btn small indent-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => indent(-1)}
+                disabled={depth === 0}
+                title="Move out a level (Shift+Tab)"
+                aria-label="Move out a level"
+              >
+                <IndentIcon out />
+              </button>
+              <button
+                type="button"
+                className="btn small indent-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => indent(1)}
+                disabled={depth >= MAX_DEPTH}
+                title="Make a sub-point (Tab)"
+                aria-label="Make a sub-point"
+              >
+                <IndentIcon />
+              </button>
+            </span>
+          )}
+          <span className="muted hint hide-touch">{listOn ? 'Tab to nest' : 'Enter to save · Shift+Enter new line'}</span>
           <span className="spacer" />
           {props.footer}
         </div>
@@ -153,15 +207,22 @@ export function NoteBody({ text }: { text: string }) {
             <NoteText text={b.text} />
           </p>
         ) : (
-          <ul key={i}>
-            {b.items.map((it, j) => (
-              <li key={j}>
-                <NoteText text={it} />
-              </li>
-            ))}
-          </ul>
+          <BulletList key={i} items={b.items} />
         ),
       )}
     </div>
+  )
+}
+
+function BulletList({ items }: { items: ListItem[] }) {
+  return (
+    <ul>
+      {items.map((it, j) => (
+        <li key={j}>
+          <NoteText text={it.text} />
+          {it.children.length > 0 && <BulletList items={it.children} />}
+        </li>
+      ))}
+    </ul>
   )
 }

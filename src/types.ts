@@ -101,12 +101,17 @@ export interface TodoItem {
   title: string
   done: boolean
   createdAt: string
+  /** How far it's nested under the item above it: 1 is a sub-to-do. Missing means top level. */
+  depth?: number
 }
 
 export interface TodoList {
   id: string
   title: string
-  /** Open and done items, in the order they were arranged. Done ones show last. */
+  /**
+   * Open and done items, in the order they were arranged. A top-level item and the
+   * deeper ones after it form a group; groups whose top item is done show last.
+   */
   items: TodoItem[]
   createdAt: string
 }

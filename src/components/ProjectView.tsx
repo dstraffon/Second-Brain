@@ -6,8 +6,13 @@ import { confirmDelete } from '../lib/confirm'
 import { useSortable } from '../lib/useSortable'
 import { Card } from './Card'
 import { NoteComposer, NoteRow } from './NotesPanel'
+import { IndentIcon } from './IndentIcon'
+import { TODO_MAX_DEPTH, canIndentTodo, depthOf, indentTodo, normalizeDepths, removeTodos, todoGroups, toggleTodo } from '../lib/todoTree'
 
 type Tab = 'lists' | 'notes'
+
+/** Touch screens, plus phone-width windows (which get the same row layout). */
+const coarse = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse), (max-width: 520px)').matches
 
 /** Lists get a bit under two thirds of the width until the divider is moved. */
 const DEFAULT_SPLIT = 0.64
@@ -234,24 +239,49 @@ function TodoListCard(props: { list: TodoList; color: string; onChange: (fn: (l:
   const [text, setText] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(l.title)
-  const open = useMemo(() => l.items.filter((i) => !i.done), [l.items])
-  const done = useMemo(() => l.items.filter((i) => i.done), [l.items])
-  const openIds = useMemo(() => open.map((i) => i.id), [open])
-  const byId = useMemo(() => new Map(open.map((i) => [i.id, i])), [open])
+  // How far the next to-do from the add box will be nested (Tab / Shift+Tab, or the ↳ button).
+  const [addDepth, setAddDepth] = useState(0)
+  // A top-level to-do and its sub-to-dos move, sort and sink as one group.
+  const groups = useMemo(() => todoGroups(l.items), [l.items])
+  const openGroups = useMemo(() => groups.filter((g) => !g[0].done), [groups])
+  const doneGroups = useMemo(() => groups.filter((g) => g[0].done), [groups])
+  const doneCount = useMemo(() => l.items.filter((i) => i.done).length, [l.items])
+  const openIds = useMemo(() => openGroups.map((g) => g[0].id), [openGroups])
+  const byId = useMemo(() => new Map(openGroups.map((g) => [g[0].id, g])), [openGroups])
   const sort = useSortable(openIds, (ids) =>
-    onChange((x) => ({ ...x, items: [...ids.map((id) => x.items.find((i) => i.id === id)!).filter(Boolean), ...x.items.filter((i) => i.done)] })),
+    onChange((x) => {
+      const gs = todoGroups(x.items)
+      const find = (id: string) => gs.find((g) => g[0].id === id) ?? []
+      return { ...x, items: [...ids.flatMap(find), ...gs.filter((g) => g[0].done).flat()] }
+    }),
   )
 
-  const setItem = (id: string, patch: Partial<TodoItem>) => onChange((x) => ({ ...x, items: x.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }))
-  // A single to-do is quick to retype, so it goes in one tap (Dylan's call).
-  const removeItem = (id: string) => onChange((x) => ({ ...x, items: x.items.filter((i) => i.id !== id) }))
+  const setItems = (fn: (items: TodoItem[]) => TodoItem[]) => onChange((x) => ({ ...x, items: fn(x.items) }))
+  const setItem = (id: string, patch: Partial<TodoItem>) => setItems((items) => items.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+  // A single to-do is quick to retype, so it goes in one tap (Dylan's call). Its sub-to-dos stay, moved up a level.
+  const removeItem = (id: string) => setItems((items) => removeTodos(items, new Set([id])))
+  const toggle = (id: string) => setItems((items) => toggleTodo(items, id))
+  const indent = (id: string, dir: 1 | -1) => setItems((items) => indentTodo(items, id, dir))
+
+  // The add box nests under the last open to-do, at most one level below it.
+  const lastOpen = openGroups.length ? openGroups[openGroups.length - 1].at(-1)! : null
+  const maxAddDepth = lastOpen ? Math.min(depthOf(lastOpen) + 1, TODO_MAX_DEPTH) : 0
+  const depthNow = Math.min(addDepth, maxAddDepth)
+  const parentTitle = (() => {
+    if (!depthNow || !openGroups.length) return ''
+    const flat = openGroups.flat()
+    for (let k = flat.length - 1; k >= 0; k--) if (depthOf(flat[k]) === depthNow - 1) return flat[k].title
+    return ''
+  })()
+
   const add = () => {
     const t = text.trim()
     if (!t) return
     // New items join the end of the open ones, above anything already done.
     onChange((x) => {
-      const o = x.items.filter((i) => !i.done)
-      return { ...x, items: [...o, newItem(t), ...x.items.filter((i) => i.done)] }
+      const gs = todoGroups(x.items)
+      const open = gs.filter((g) => !g[0].done).flat()
+      return { ...x, items: normalizeDepths([...open, newItem(t, depthNow), ...gs.filter((g) => g[0].done).flat()]) }
     })
     setText('')
   }
@@ -260,6 +290,19 @@ function TodoListCard(props: { list: TodoList; color: string; onChange: (fn: (l:
     if (t && t !== l.title) onChange((x) => ({ ...x, title: t }))
     setRenaming(false)
   }
+
+  const row = (i: TodoItem, opts: { handle?: ReturnType<typeof sort.handleProps> } = {}) => (
+    <TodoRow
+      key={i.id}
+      item={i}
+      set={setItem}
+      toggle={toggle}
+      remove={removeItem}
+      canIn={canIndentTodo(l.items, i.id, 1)}
+      onIndent={(dir) => indent(i.id, dir)}
+      handle={opts.handle}
+    />
+  )
 
   return (
     <section className="todo-list" style={{ '--chip': props.color } as React.CSSProperties} aria-label={l.title}>
@@ -302,7 +345,7 @@ function TodoListCard(props: { list: TodoList; color: string; onChange: (fn: (l:
         )}
         {!renaming && l.items.length > 0 && (
           <span className="muted small">
-            {done.length}/{l.items.length}
+            {doneCount}/{l.items.length}
           </span>
         )}
         <button
@@ -325,48 +368,74 @@ function TodoListCard(props: { list: TodoList; color: string; onChange: (fn: (l:
         </button>
       </header>
       <form
-        className="quick-add compact"
+        className={`quick-add compact todo-add ${depthNow ? 'nested' : ''}`}
+        style={{ '--depth': depthNow } as React.CSSProperties}
         onSubmit={(e) => {
           e.preventDefault()
           add()
         }}
       >
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a to-do…" aria-label={`Add to ${l.title}`} autoComplete="off" enterKeyHint="done" />
+        {maxAddDepth > 0 && (
+          <button
+            type="button"
+            className={`btn sub-toggle ${depthNow ? 'on' : ''}`}
+            aria-pressed={depthNow > 0}
+            title={depthNow ? 'Back to a top-level to-do (Shift+Tab)' : 'Add as a sub-to-do (Tab)'}
+            aria-label={depthNow ? 'Add at the top level' : 'Add as a sub-to-do'}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setAddDepth(depthNow ? 0 : maxAddDepth)}
+          >
+            ↳
+          </button>
+        )}
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={depthNow ? `Sub-to-do under “${parentTitle}”…` : 'Add a to-do…'}
+          aria-label={depthNow ? `Add a sub-to-do under ${parentTitle}` : `Add to ${l.title}`}
+          autoComplete="off"
+          enterKeyHint="done"
+          onKeyDown={(e) => {
+            // Tab nests the next to-do, Shift+Tab un-nests it. Past either end, Tab moves focus as usual.
+            if (e.key !== 'Tab' || e.metaKey || e.ctrlKey || e.altKey) return
+            const next = depthNow + (e.shiftKey ? -1 : 1)
+            if (next < 0 || next > maxAddDepth) return
+            e.preventDefault()
+            setAddDepth(next)
+          }}
+        />
         <button type="submit" className="btn primary" disabled={!text.trim()}>
           Add
         </button>
       </form>
-      <ul className="task-list" ref={sort.listRef}>
+      <ul className="task-list todo-items" ref={sort.listRef}>
         {sort.order.map((id) => {
-          const i = byId.get(id)
-          if (!i) return null
+          const g = byId.get(id)
+          if (!g) return null
           return (
-            <TodoRow
-              key={i.id}
-              item={i}
-              set={setItem}
-              remove={removeItem}
-              dragging={sort.dragId === i.id}
-              handle={open.length > 1 ? sort.handleProps(i.id) : undefined}
-            />
+            <li key={id} className={`todo-group ${sort.dragId === id ? 'dragging' : ''}`} data-sort-id={id}>
+              {g.map((i, k) => row(i, { handle: k === 0 && openGroups.length > 1 ? sort.handleProps(id) : undefined }))}
+            </li>
           )
         })}
-        {done.map((i) => (
-          <TodoRow key={i.id} item={i} set={setItem} remove={removeItem} />
+        {doneGroups.map((g) => (
+          <li key={g[0].id} className="todo-group done">
+            {g.map((i) => row(i))}
+          </li>
         ))}
       </ul>
       {l.items.length === 0 && <p className="empty">Nothing on this list yet.</p>}
-      {done.length > 1 && (
+      {doneCount > 1 && (
         <button className="btn small ghost clear-done" onClick={() =>
             confirmDelete({
-              title: `Clear ${done.length} done to-dos?`,
+              title: `Clear ${doneCount} done to-dos?`,
               detail: `They’re removed from “${l.title}”. Open to-dos stay.`,
               action: 'Clear',
-              onConfirm: () => onChange((x) => ({ ...x, items: x.items.filter((i) => !i.done) })),
+              onConfirm: () => setItems((items) => removeTodos(items, new Set(items.filter((i) => i.done).map((i) => i.id)))),
             })
           }
         >
-          Clear {done.length} done
+          Clear {doneCount} done
         </button>
       )}
     </section>
@@ -376,11 +445,14 @@ function TodoListCard(props: { list: TodoList; color: string; onChange: (fn: (l:
 function TodoRow(props: {
   item: TodoItem
   set: (id: string, patch: Partial<TodoItem>) => void
+  toggle: (id: string) => void
   remove: (id: string) => void
-  dragging?: boolean
+  canIn: boolean
+  onIndent: (dir: 1 | -1) => void
   handle?: ReturnType<ReturnType<typeof useSortable>['handleProps']>
 }) {
   const { item: i } = props
+  const depth = depthOf(i)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(i.title)
   const save = () => {
@@ -388,8 +460,14 @@ function TodoRow(props: {
     if (t && t !== i.title) props.set(i.id, { title: t })
     setEditing(false)
   }
+  // Nesting can move the row into another group (a fresh row), so keep any typed change first.
+  const nest = (dir: 1 | -1) => {
+    const t = draft.trim()
+    if (t && t !== i.title) props.set(i.id, { title: t })
+    props.onIndent(dir)
+  }
   return (
-    <li className={`task ${i.done ? 'done' : ''} ${props.dragging ? 'dragging' : ''}`} data-sort-id={i.done ? undefined : i.id}>
+    <div className={`task ${i.done ? 'done' : ''} ${depth ? 'sub' : ''}`} style={depth ? ({ '--depth': depth } as React.CSSProperties) : undefined}>
       {props.handle ? (
         <button type="button" className="drag-handle" aria-label={`Reorder ${i.title}. Drag, or use the arrow keys.`} title="Drag to reorder" {...props.handle}>
           <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden>
@@ -405,28 +483,50 @@ function TodoRow(props: {
         <span className="drag-spacer" aria-hidden />
       )}
       <label className="check">
-        <input type="checkbox" checked={i.done} onChange={() => props.set(i.id, { done: !i.done })} aria-label={i.done ? `Mark ${i.title} not done` : `Mark ${i.title} done`} />
+        <input type="checkbox" checked={i.done} onChange={() => props.toggle(i.id)} aria-label={i.done ? `Mark ${i.title} not done` : `Mark ${i.title} done`} />
         <span className="box" aria-hidden />
       </label>
       {editing ? (
-        <input
-          className="inline-edit"
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') save()
-            if (e.key === 'Escape') {
-              e.stopPropagation()
-              setEditing(false)
-            }
-          }}
-        />
+        <span className="todo-edit">
+          <input
+            className="inline-edit"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                setEditing(false)
+              }
+              // Tab / Shift+Tab nest or un-nest the to-do being edited.
+              if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey && (e.shiftKey ? depth > 0 : props.canIn)) {
+                e.preventDefault()
+                nest(e.shiftKey ? -1 : 1)
+              }
+            }}
+          />
+          {/* While editing (how a phone gets at it), the nest buttons sit by the field. They keep focus in it. */}
+          <span className="todo-edit-nest">
+            <button type="button" className="icon-btn subtle" disabled={depth === 0} aria-label="Move out a level" title="Move out a level (Shift+Tab)" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => nest(-1)}>
+              <IndentIcon out />
+            </button>
+            <button type="button" className="icon-btn subtle" disabled={!props.canIn} aria-label="Make a sub-to-do" title="Make a sub-to-do of the one above (Tab)" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => nest(1)}>
+              <IndentIcon />
+            </button>
+          </span>
+        </span>
       ) : (
         <span
           className="task-title"
           title="Double-click to edit"
+          onClick={() => {
+            // A phone has no double-click (and no hover buttons for nesting), so one tap edits there.
+            if (!coarse()) return
+            setDraft(i.title)
+            setEditing(true)
+          }}
           onDoubleClick={() => {
             setDraft(i.title)
             setEditing(true)
@@ -436,11 +536,21 @@ function TodoRow(props: {
         </span>
       )}
       <div className="row-actions">
+        {depth > 0 && (
+          <button className="icon-btn subtle indent-act" aria-label={`Move ${i.title} out a level`} title="Move out a level" onClick={() => props.onIndent(-1)}>
+            <IndentIcon out />
+          </button>
+        )}
+        {props.canIn && (
+          <button className="icon-btn subtle indent-act" aria-label={`Make ${i.title} a sub-to-do`} title="Make a sub-to-do of the one above" onClick={() => props.onIndent(1)}>
+            <IndentIcon />
+          </button>
+        )}
         <button className="icon-btn subtle" aria-label={`Delete ${i.title}`} onClick={() => props.remove(i.id)}>
           ×
         </button>
       </div>
-    </li>
+    </div>
   )
 }
 

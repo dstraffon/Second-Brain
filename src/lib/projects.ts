@@ -16,7 +16,7 @@ export function newProject(name: string, existing: Project[]): Project {
 }
 
 export const newList = (title: string): TodoList => ({ id: uid(), title, items: [], createdAt: new Date().toISOString() })
-export const newItem = (title: string): TodoItem => ({ id: uid(), title, done: false, createdAt: new Date().toISOString() })
+export const newItem = (title: string, depth = 0): TodoItem => ({ id: uid(), title, done: false, createdAt: new Date().toISOString(), ...(depth ? { depth } : {}) })
 
 export function projectStats(p: Project) {
   let open = 0
