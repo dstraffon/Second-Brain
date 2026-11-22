@@ -868,6 +868,18 @@ textarea {
 .note-body li::marker {
   color: var(--chip, var(--muted));
 }
+/* Sub-points: tucked in under their bullet, with hollow then square markers like a docs app. */
+.note-body li > ul {
+  margin-top: 2px;
+  padding-left: 16px;
+  list-style: circle;
+}
+.note-body li > ul ul {
+  list-style: square;
+}
+.note-body li > ul li::marker {
+  color: color-mix(in srgb, var(--chip, var(--muted)) 75%, var(--muted));
+}
 .note-link {
   color: var(--accent);
   text-decoration: underline;
@@ -931,6 +943,24 @@ textarea {
 .note-editor .list-btn.on {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong));
+}
+.note-editor .indent-btns {
+  display: inline-flex;
+  gap: 4px;
+}
+.note-editor .indent-btn {
+  padding: 2px 6px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+}
+@media (pointer: coarse) {
+  /* Thumb-sized on a phone, where these stand in for the Tab key. */
+  .note-editor .indent-btn {
+    min-width: 36px;
+    min-height: 30px;
+    justify-content: center;
+  }
 }
 .note-editor .list-btn span {
   font-size: 15px;
