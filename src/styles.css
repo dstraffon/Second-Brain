@@ -3253,3 +3253,225 @@ body.sorting .dash-grip {
     }
   }
 }
+
+/* ---------- Google Calendar ---------- */
+.cal-tile,
+.cal-setup,
+.cal-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cal-setup .empty,
+.cal-settings p {
+  margin: 0;
+}
+.cal-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cal-day-head:not(:first-child) {
+  margin-top: 6px;
+}
+.cal-day-head h3,
+.cal-day h3 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.cal-day-head .link-btn {
+  font-size: 12.5px;
+  align-self: auto;
+}
+.cal-empty {
+  margin: 0;
+  font-size: 13px;
+}
+.cal-list,
+.cal-allday {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cal-allday {
+  gap: 4px;
+}
+.cal-allday-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13.5px;
+  min-width: 0;
+}
+.cal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cal);
+  flex: none;
+}
+.cal-allday-item .cal-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-ev {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-decoration: none;
+  min-width: 0;
+}
+a.cal-ev:hover,
+a.cal-allday-item:hover {
+  background: var(--surface-2);
+}
+a.cal-allday-item:hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--border-strong));
+}
+.cal-time {
+  display: flex;
+  flex-direction: column;
+  width: 58px;
+  flex: none;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  padding-top: 1px;
+}
+.cal-time .muted {
+  font-size: 12px;
+}
+.cal-bar {
+  width: 3px;
+  border-radius: 3px;
+  background: var(--cal);
+  flex: none;
+}
+.cal-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+.cal-ev .cal-title {
+  font-size: 14.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.cal-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-meta.hot {
+  color: var(--accent);
+}
+.cal-ev.is-now {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cal-ev.is-past {
+  opacity: 0.5;
+}
+.cal-ev.is-declined .cal-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.cal-join {
+  align-self: center;
+  text-decoration: none;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.cal-now-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+  font-size: 11.5px;
+  color: var(--bad);
+  font-variant-numeric: tabular-nums;
+}
+.cal-now-line::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--bad);
+  opacity: 0.6;
+}
+.cal-more {
+  font-size: 12.5px;
+}
+.cal-synced,
+.cal-account {
+  margin: 0;
+}
+.cal-error {
+  margin: 0;
+  color: var(--bad);
+}
+.cal-refresh {
+  font-size: 16px;
+}
+.cal-refresh.spin {
+  animation: cal-spin 0.9s linear infinite;
+}
+@keyframes cal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cal-refresh-chip {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.cal-day {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.cal-day h3 {
+  font-size: 13px;
+  color: var(--text);
+}
+.cal-day .cal-allday-item {
+  background: var(--surface);
+}
+.cal-day a.cal-ev:hover {
+  background: var(--surface);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-refresh.spin {
+    animation: none;
+    opacity: 0.5;
+  }
+}

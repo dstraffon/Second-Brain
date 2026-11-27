@@ -32,6 +32,8 @@ export interface ModuleSlot {
   id: string
   /** Column it starts in (0-based), for the default layout and for modules added later. */
   column: number
+  /** New to an existing layout: goes on top of its column instead of the bottom. */
+  first?: boolean
 }
 
 export function defaultLayout(mods: ModuleSlot[], hidden: string[] = []): DashLayout {
@@ -53,7 +55,12 @@ export function normalize(l: DashLayout | undefined, mods: ModuleSlot[], fallbac
       return true
     }),
   )
-  for (const m of mods) if (!seen.has(m.id)) columns[Math.min(m.column, columns.length - 1)].push(m.id)
+  for (const m of mods) {
+    if (seen.has(m.id)) continue
+    const col = columns[Math.min(m.column, columns.length - 1)]
+    if (m.first) col.unshift(m.id)
+    else col.push(m.id)
+  }
   const widths = Array.isArray(l.widths) && l.widths.length === columns.length && l.widths.every((w) => w > 0) ? l.widths : undefined
   const hidden = (Array.isArray(l.hidden) ? l.hidden : []).filter((id) => known.has(id))
   return { columns, widths, hidden }

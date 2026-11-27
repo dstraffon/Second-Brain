@@ -30,6 +30,7 @@ On a phone, open the site and use "Add to Home Screen" so it opens like an app.
 - **Streaks**: add your own, tap "Log today", or tap any of the last 7 days to fix a missed log. "Reset to 0 if I miss a day" is off by default. With it off, the count is the number of days logged since the last reset. ⋯ → Reset starts over by hand. Tap the number (or ⋯ → Set length) to set the current length yourself, for a streak that started before you added it.
 - **Daily summary** and **focus quote** at the top. Either can be switched off in Settings; the summary is one self-contained component (`src/components/DailySummary.tsx`).
 - **Weekly review**: tasks finished per day, habit grid for streaks and daily tasks, what's still open, and a short reflection saved per week.
+- **Calendar**: today's and tomorrow's Google Calendar events on a tile, with what's on now, a countdown to the next event and a Join button for Meet calls; the full view (`#/calendar`) shows the next seven days and lets you hide calendars. Read-only, signed in with Google from the browser. One-time setup: [docs/google-calendar-setup.md](docs/google-calendar-setup.md).
 - **Weather**: Open-Meteo (no API key), refreshed every 30 minutes.
 - **Keyboard**: `t` task, `n` note, `l` link, `r` weekly review, `Esc` back.
 

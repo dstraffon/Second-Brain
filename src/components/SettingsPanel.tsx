@@ -3,6 +3,8 @@ import type { Settings } from '../types'
 import { store } from '../lib/storage'
 import { syncConfigured } from '../lib/sync/config'
 import { SyncSettings } from './SyncSettings'
+import { CalendarSettings } from './CalendarPanel'
+import { todayKey } from '../lib/dates'
 import { confirmDelete } from '../lib/confirm'
 
 export interface TileSetting {
@@ -87,6 +89,9 @@ export function SettingsPanel(props: {
             Arrange and resize tiles
           </button>
         </div>
+
+        <h3>Google Calendar</h3>
+        <CalendarSettings today={todayKey()} />
 
         <h3>{syncConfigured() ? 'Sync' : 'Your data'}</h3>
         <SyncSettings />

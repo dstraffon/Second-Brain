@@ -36,6 +36,8 @@ jobs:
           # Cross-device sync (docs/sync-setup.md). Repository variables, not secrets: both are public by design.
           VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ vars.SUPABASE_KEY }}
+          # Google Calendar (docs/google-calendar-setup.md). Optional: the client ID can also be pasted in the app.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

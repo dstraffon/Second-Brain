@@ -7,6 +7,7 @@ import { FocusQuote } from '../components/FocusQuote'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 import { StreaksPanel } from '../components/StreaksPanel'
 import { LinksPanel } from '../components/LinksPanel'
+import { CalendarPanel } from '../components/CalendarPanel'
 
 /** What a module gets from the app when it renders. */
 export interface ModuleContext {
@@ -29,6 +30,8 @@ export interface ModuleDef {
   blurb: string
   /** Column it starts in on a wide screen (0-based). Also where it lands the first time an existing layout sees it. */
   column: number
+  /** Lands at the top of its column, not the bottom, the first time an existing layout sees it. */
+  first?: boolean
   /** Grows to fill the rest of its column when it's the last tile there (long lists like Tasks and Notes). */
   stretch?: boolean
   /** Quick key that focuses `inputId` (folded tiles unfold first; hidden tiles open their full view). */
@@ -61,6 +64,15 @@ export const MODULES: ModuleDef[] = [
     inputId: 'quick-note',
     tile: (c) => <NotesPanel {...c.focus} />,
     full: (c) => <NotesPanel {...c.focus} />,
+  },
+  {
+    id: 'calendar',
+    name: 'Calendar',
+    blurb: 'Today and tomorrow from Google Calendar',
+    column: 2,
+    first: true,
+    tile: (c) => <CalendarPanel today={c.today} {...c.focus} />,
+    full: (c) => <CalendarPanel today={c.today} {...c.focus} />,
   },
   {
     id: 'quote',
